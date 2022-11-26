@@ -4,6 +4,7 @@ import { PointerLockControls } from "three/addons/controls/PointerLockControls.j
 
 let camera, scene, renderer, controls;
 
+// NOTE 3D空間場のオブジェクトを格納するための配列
 const objects = [];
 
 let raycaster;
@@ -234,8 +235,9 @@ function animate() {
     raycaster.ray.origin.copy(controls.getObject().position);
     raycaster.ray.origin.y -= 10;
 
+    // NOTE
     const intersections = raycaster.intersectObjects(objects, false);
-
+    // NOTE オブジェクトと交差しているか
     const onObject = intersections.length > 0;
 
     // NOTE 変化量って意味かな？
