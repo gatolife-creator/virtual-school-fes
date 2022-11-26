@@ -1,77 +1,217 @@
 import * as THREE from "three";
 
-import Stats from "three/addons/libs/stats.module.js";
+import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 
-import { FirstPersonControls } from "three/addons/controls/FirstPersonControls.js";
-import { ImprovedNoise } from "three/addons/math/ImprovedNoise.js";
+let camera, scene, renderer, controls;
 
-let container, stats;
-let camera, controls, scene, renderer;
-let mesh, texture;
+const objects = [];
 
-const worldWidth = 256,
-  worldDepth = 256;
-const clock = new THREE.Clock();
+let raycaster;
+
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let canJump = false;
+
+let prevTime = performance.now();
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+const vertex = new THREE.Vector3();
+const color = new THREE.Color();
 
 init();
 animate();
 
 function init() {
-  container = document.body;
-
   camera = new THREE.PerspectiveCamera(
-    60,
+    75,
     window.innerWidth / window.innerHeight,
     1,
-    10000
+    1000
   );
+  camera.position.y = 10;
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xefd1b5);
-  scene.fog = new THREE.FogExp2(0xefd1b5, 0.0025);
+  scene.background = new THREE.Color(0xffffff);
+  // NOTE これが無いと遠近感に欠ける
+  scene.fog = new THREE.Fog(0xffffff, 0, 750);
 
-  const data = generateHeight(worldWidth, worldDepth);
+  // NOTE これがないと、ブロックが真っ黒になった
+  const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
+  light.position.set(0.5, 1, 0.75);
+  scene.add(light);
 
-  camera.position.set(100, 800, -800);
-  camera.lookAt(-100, 810, -800);
+  controls = new PointerLockControls(camera, document.body);
 
-  const geometry = new THREE.PlaneGeometry(
-    7500,
-    7500,
-    worldWidth - 1,
-    worldDepth - 1
+  const blocker = document.getElementById("blocker");
+  const instructions = document.getElementById("instructions");
+
+  instructions.addEventListener("click", function () {
+    controls.lock();
+  });
+
+  controls.addEventListener("lock", function () {
+    instructions.style.display = "none";
+    blocker.style.display = "none";
+  });
+
+  controls.addEventListener("unlock", function () {
+    blocker.style.display = "block";
+    instructions.style.display = "";
+  });
+
+  scene.add(controls.getObject());
+
+  const onKeyDown = function (event) {
+    switch (event.code) {
+      case "ArrowUp":
+      case "KeyW":
+        moveForward = true;
+        break;
+
+      case "ArrowLeft":
+      case "KeyA":
+        moveLeft = true;
+        break;
+
+      case "ArrowDown":
+      case "KeyS":
+        moveBackward = true;
+        break;
+
+      case "ArrowRight":
+      case "KeyD":
+        moveRight = true;
+        break;
+
+      case "Space":
+        if (canJump === true) velocity.y += 350;
+        // NOTE ジャンプすると、地面に着地するまでジャンプできなくなる
+        canJump = false;
+        break;
+    }
+  };
+
+  const onKeyUp = function (event) {
+    switch (event.code) {
+      case "ArrowUp":
+      case "KeyW":
+        moveForward = false;
+        break;
+
+      case "ArrowLeft":
+      case "KeyA":
+        moveLeft = false;
+        break;
+
+      case "ArrowDown":
+      case "KeyS":
+        moveBackward = false;
+        break;
+
+      case "ArrowRight":
+      case "KeyD":
+        moveRight = false;
+        break;
+    }
+  };
+
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keyup", onKeyUp);
+
+  raycaster = new THREE.Raycaster(
+    new THREE.Vector3(),
+    new THREE.Vector3(0, -1, 0),
+    0,
+    10
   );
-  geometry.rotateX(-Math.PI / 2);
 
-  const vertices = geometry.attributes.position.array;
+  // floor
 
-  for (let i = 0, j = 0, l = vertices.length; i < l; i++, j += 3) {
-    vertices[j + 1] = data[i] * 10;
+  let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+  floorGeometry.rotateX(-Math.PI / 2);
+
+  // vertex displacement
+
+  let position = floorGeometry.attributes.position;
+
+  for (let i = 0, l = position.count; i < l; i++) {
+    vertex.fromBufferAttribute(position, i);
+
+    vertex.x += Math.random() * 20 - 10;
+    vertex.y += Math.random() * 2;
+    vertex.z += Math.random() * 20 - 10;
+
+    position.setXYZ(i, vertex.x, vertex.y, vertex.z);
   }
 
-  texture = new THREE.CanvasTexture(
-    generateTexture(data, worldWidth, worldDepth)
-  );
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
+  floorGeometry = floorGeometry.toNonIndexed(); // ensure each face has unique vertices
 
-  mesh = new THREE.Mesh(
-    geometry,
-    new THREE.MeshBasicMaterial({ map: texture })
-  );
-  scene.add(mesh);
+  position = floorGeometry.attributes.position;
+  const colorsFloor = [];
 
-  renderer = new THREE.WebGLRenderer();
+  for (let i = 0, l = position.count; i < l; i++) {
+    color.setHSL(Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75);
+    colorsFloor.push(color.r, color.g, color.b);
+  }
+
+  floorGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(colorsFloor, 3)
+  );
+
+  const floorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  scene.add(floor);
+
+  // objects
+
+  const boxGeometry = new THREE.BoxGeometry(20, 20, 20).toNonIndexed();
+
+  position = boxGeometry.attributes.position;
+  const colorsBox = [];
+
+  for (let i = 0, l = position.count; i < l; i++) {
+    color.setHSL(Math.random() * 0.3 + 0.5, 0.75, Math.random() * 0.25 + 0.75);
+    colorsBox.push(color.r, color.g, color.b);
+  }
+
+  // NOTE ブロックのジオメトリ
+  boxGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(colorsBox, 3)
+  );
+
+  // NOTE ブロック生成
+  for (let i = 0; i < 500; i++) {
+    const boxMaterial = new THREE.MeshPhongMaterial({
+      specular: 0xffffff,
+      flatShading: true,
+      vertexColors: true,
+    });
+    boxMaterial.color.setHSL(
+      Math.random() * 0.2 + 0.5,
+      0.75,
+      Math.random() * 0.25 + 0.75
+    );
+
+    const box = new THREE.Mesh(boxGeometry, boxMaterial);
+    box.position.x = Math.floor(Math.random() * 20 - 10) * 20;
+    box.position.y = Math.floor(Math.random() * 20) * 20 + 10;
+    box.position.z = Math.floor(Math.random() * 20 - 10) * 20;
+
+    scene.add(box);
+    objects.push(box);
+  }
+
+  //
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  container.appendChild(renderer.domElement);
-
-  controls = new FirstPersonControls(camera, renderer.domElement);
-  controls.movementSpeed = 150;
-  controls.lookSpeed = 0.1;
-
-  stats = new Stats();
-  container.appendChild(stats.dom);
+  document.body.appendChild(renderer.domElement);
 
   //
 
@@ -83,109 +223,56 @@ function onWindowResize() {
   camera.updateProjectionMatrix();
 
   renderer.setSize(window.innerWidth, window.innerHeight);
-
-  controls.handleResize();
 }
-
-function generateHeight(width, height) {
-  let seed = Math.PI / 4;
-  window.Math.random = function () {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-  };
-
-  const size = width * height,
-    data = new Uint8Array(size);
-  const perlin = new ImprovedNoise(),
-    z = Math.random() * 100;
-
-  let quality = 1;
-
-  for (let j = 0; j < 4; j++) {
-    for (let i = 0; i < size; i++) {
-      const x = i % width,
-        y = ~~(i / width);
-      data[i] += Math.abs(
-        perlin.noise(x / quality, y / quality, z) * quality * 1.75
-      );
-    }
-
-    quality *= 5;
-  }
-
-  return data;
-}
-
-function generateTexture(data, width, height) {
-  let context, image, imageData, shade;
-
-  const vector3 = new THREE.Vector3(0, 0, 0);
-
-  const sun = new THREE.Vector3(1, 1, 1);
-  sun.normalize();
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  context = canvas.getContext("2d");
-  context.fillStyle = "#000";
-  context.fillRect(0, 0, width, height);
-
-  image = context.getImageData(0, 0, canvas.width, canvas.height);
-  imageData = image.data;
-
-  for (let i = 0, j = 0, l = imageData.length; i < l; i += 4, j++) {
-    vector3.x = data[j - 2] - data[j + 2];
-    vector3.y = 2;
-    vector3.z = data[j - width * 2] - data[j + width * 2];
-    vector3.normalize();
-
-    shade = vector3.dot(sun);
-
-    imageData[i] = (96 + shade * 128) * (0.5 + data[j] * 0.007);
-    imageData[i + 1] = (32 + shade * 96) * (0.5 + data[j] * 0.007);
-    imageData[i + 2] = shade * 96 * (0.5 + data[j] * 0.007);
-  }
-
-  context.putImageData(image, 0, 0);
-
-  // Scaled 4x
-
-  const canvasScaled = document.createElement("canvas");
-  canvasScaled.width = width * 4;
-  canvasScaled.height = height * 4;
-
-  context = canvasScaled.getContext("2d");
-  context.scale(4, 4);
-  context.drawImage(canvas, 0, 0);
-
-  image = context.getImageData(0, 0, canvasScaled.width, canvasScaled.height);
-  imageData = image.data;
-
-  for (let i = 0, l = imageData.length; i < l; i += 4) {
-    const v = ~~(Math.random() * 5);
-
-    imageData[i] += v;
-    imageData[i + 1] += v;
-    imageData[i + 2] += v;
-  }
-
-  context.putImageData(image, 0, 0);
-
-  return canvasScaled;
-}
-
-//
 
 function animate() {
   requestAnimationFrame(animate);
 
-  render();
-  stats.update();
-}
+  const time = performance.now();
 
-function render() {
-  controls.update(clock.getDelta());
+  if (controls.isLocked === true) {
+    raycaster.ray.origin.copy(controls.getObject().position);
+    raycaster.ray.origin.y -= 10;
+
+    const intersections = raycaster.intersectObjects(objects, false);
+
+    const onObject = intersections.length > 0;
+
+    // NOTE 変化量って意味かな？
+    const delta = (time - prevTime) / 1000;
+
+    // NOTE この下の数字が小さいほど速度が速いらしい
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
+
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.normalize(); // this ensures consistent movements in all directions
+
+    if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+
+    if (onObject === true) {
+      velocity.y = Math.max(0, velocity.y);
+      canJump = true;
+    }
+
+    controls.moveRight(-velocity.x * delta);
+    controls.moveForward(-velocity.z * delta);
+
+    controls.getObject().position.y += velocity.y * delta; // new behavior
+
+    if (controls.getObject().position.y < 10) {
+      velocity.y = 0;
+      controls.getObject().position.y = 10;
+
+      canJump = true;
+    }
+  }
+
+  prevTime = time;
+
   renderer.render(scene, camera);
 }

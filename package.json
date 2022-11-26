@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/gatolife-creator/virtual-school-fes#readme",
   "dependencies": {
+    "@types/three": "^0.146.0",
     "three": "^0.146.0"
   },
   "devDependencies": {
@@ -29,6 +30,5 @@
     "webpack-cli": "^5.0.0",
     "webpack-dev-server": "^4.11.1"
   },
-
   "private": true
 }
