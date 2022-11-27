@@ -1,8 +1,9 @@
 import * as THREE from "three";
 
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-let camera, scene, renderer, controls;
+let camera, scene, renderer, controls, loader;
 
 // NOTE 3D空間場のオブジェクトを格納するための配列
 const objects = [];
@@ -21,6 +22,8 @@ const direction = new THREE.Vector3();
 const vertex = new THREE.Vector3();
 const color = new THREE.Color();
 
+let model = null;
+
 init();
 animate();
 
@@ -36,7 +39,7 @@ function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xffffff);
   // NOTE これが無いと遠近感に欠ける
-  scene.fog = new THREE.Fog(0xffffff, 0, 750);
+  scene.fog = new THREE.Fog(0xffffff, 0, 1000);
 
   // NOTE これがないと、ブロックが真っ黒になった
   const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
@@ -63,6 +66,17 @@ function init() {
   });
 
   scene.add(controls.getObject());
+
+  loader = new GLTFLoader();
+  loader.load("./models/ku-high-school.glb", (object) => {
+    model = object.scene;
+    model.name = "校舎";
+    const scale = 50;
+    model.scale.set(scale, scale, scale);
+    model.position.set(0, scale, 0);
+    scene.add(model);
+    console.log(model);
+  });
 
   const onKeyDown = function (event) {
     switch (event.code) {
@@ -186,26 +200,26 @@ function init() {
   );
 
   // NOTE ブロック生成
-  for (let i = 0; i < 500; i++) {
-    const boxMaterial = new THREE.MeshPhongMaterial({
-      specular: 0xffffff,
-      flatShading: true,
-      vertexColors: true,
-    });
-    boxMaterial.color.setHSL(
-      Math.random() * 0.2 + 0.5,
-      0.75,
-      Math.random() * 0.25 + 0.75
-    );
+  // for (let i = 0; i < 500; i++) {
+  //   const boxMaterial = new THREE.MeshPhongMaterial({
+  //     specular: 0xffffff,
+  //     flatShading: true,
+  //     vertexColors: true,
+  //   });
+  //   boxMaterial.color.setHSL(
+  //     Math.random() * 0.2 + 0.5,
+  //     0.75,
+  //     Math.random() * 0.25 + 0.75
+  //   );
 
-    const box = new THREE.Mesh(boxGeometry, boxMaterial);
-    box.position.x = Math.floor(Math.random() * 20 - 10) * 20;
-    box.position.y = Math.floor(Math.random() * 20) * 20 + 10;
-    box.position.z = Math.floor(Math.random() * 20 - 10) * 20;
+  //   const box = new THREE.Mesh(boxGeometry, boxMaterial);
+  //   box.position.x = Math.floor(Math.random() * 20 - 10) * 20;
+  //   box.position.y = Math.floor(Math.random() * 20) * 20 + 10;
+  //   box.position.z = Math.floor(Math.random() * 20 - 10) * 20;
 
-    scene.add(box);
-    objects.push(box);
-  }
+  //   scene.add(box);
+  //   objects.push(box);
+  // }
 
   //
 
@@ -244,8 +258,8 @@ function animate() {
     const delta = (time - prevTime) / 1000;
 
     // NOTE この下の数字が小さいほど速度が速いらしい
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
+    velocity.x -= velocity.x * 2.5 * delta;
+    velocity.z -= velocity.z * 2.5 * delta;
 
     velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
 
