@@ -198,6 +198,10 @@ function controls(deltaTime) {
 
 const loader = new GLTFLoader().setPath("./models/");
 
+loader.load("stairs.glb", (gltf) => {
+  scene.add(gltf.scene);
+})
+
 loader.load("test.glb", (gltf) => {
   scene.add(gltf.scene);
 
