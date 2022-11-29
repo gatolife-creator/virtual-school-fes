@@ -198,7 +198,7 @@ function controls(deltaTime) {
 
 const loader = new GLTFLoader().setPath("./models/");
 
-loader.load("ku-high-school.glb", (gltf) => {
+loader.load("test.glb", (gltf) => {
   scene.add(gltf.scene);
 
   // NOTE これがないと、地面がすり抜けてしまう。
